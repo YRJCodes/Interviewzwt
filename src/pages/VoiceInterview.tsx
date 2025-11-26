@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Mic, MicOff, Loader2, Volume2, MessageSquare } from "lucide-react";
+import { Mic, MicOff, Loader2, Volume2, MessageSquare, Clock } from "lucide-react";
 
 const VoiceInterview = () => {
   const { sessionId } = useParams();
@@ -15,6 +15,9 @@ const VoiceInterview = () => {
   const [messages, setMessages] = useState<Array<{ role: string; content: string }>>([]);
   const [interviewStarted, setInterviewStarted] = useState(false);
   const [jobDescription, setJobDescription] = useState("");
+  const [questionCount, setQuestionCount] = useState(0);
+  const [startTime, setStartTime] = useState<Date | null>(null);
+  const [elapsedTime, setElapsedTime] = useState(0);
   const navigate = useNavigate();
   const { toast } = useToast();
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -54,6 +57,23 @@ const VoiceInterview = () => {
     };
   }, []);
 
+  // Timer for interview duration
+  useEffect(() => {
+    if (!startTime) return;
+    
+    const interval = setInterval(() => {
+      setElapsedTime(Math.floor((Date.now() - startTime.getTime()) / 1000));
+    }, 1000);
+    
+    return () => clearInterval(interval);
+  }, [startTime]);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
   const checkAuth = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
@@ -83,6 +103,7 @@ const VoiceInterview = () => {
   const startInterview = async () => {
     setInterviewStarted(true);
     setIsAISpeaking(true);
+    setStartTime(new Date());
     
     // Get initial greeting from AI
     try {
@@ -99,6 +120,7 @@ const VoiceInterview = () => {
       if (error) throw error;
 
       setMessages([{ role: 'assistant', content: data.message }]);
+      setQuestionCount(1);
       speakText(data.message);
     } catch (error: any) {
       console.error('Error starting interview:', error);
@@ -195,6 +217,7 @@ const VoiceInterview = () => {
       if (responseError) throw responseError;
 
       setMessages(prev => [...prev, { role: 'assistant', content: responseData.message }]);
+      setQuestionCount(prev => prev + 1);
       speakText(responseData.message);
 
     } catch (error: any) {
@@ -295,6 +318,8 @@ const VoiceInterview = () => {
               <CardTitle>Ready to Begin Your Interview?</CardTitle>
               <CardDescription>
                 This will be a conversational voice interview. Answer questions naturally as you would in a real interview.
+                <br /><br />
+                <strong>Interview Duration:</strong> Typically 5-7 questions (10-15 minutes)
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -319,10 +344,22 @@ const VoiceInterview = () => {
           </Card>
         ) : (
           <div className="space-y-6">
-              <div className="flex items-center justify-between">
-              <Badge variant="outline">
-                Live Voice Interview
-              </Badge>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <Badge variant="outline" className="text-sm">
+                  Live Voice Interview
+                </Badge>
+                <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-1">
+                    <MessageSquare className="h-4 w-4" />
+                    <span>{questionCount} questions</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Clock className="h-4 w-4" />
+                    <span>{formatTime(elapsedTime)}</span>
+                  </div>
+                </div>
+              </div>
               <Button
                 onClick={endInterview}
                 variant="outline"
@@ -331,6 +368,17 @@ const VoiceInterview = () => {
                 End Interview
               </Button>
             </div>
+
+            {questionCount >= 5 && (
+              <Card className="border-accent bg-accent/5">
+                <CardContent className="pt-4">
+                  <p className="text-sm text-center">
+                    💡 <strong>Tip:</strong> You've answered {questionCount} questions. 
+                    A typical interview has 5-7 questions. Click "End Interview" when you're ready to get your feedback.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
 
             <Card className="min-h-[400px]">
               <CardHeader>
