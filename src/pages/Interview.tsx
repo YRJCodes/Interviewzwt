@@ -19,12 +19,13 @@ const Interview = () => {
   const { jobRoleId } = useParams();
   const [jobRole, setJobRole] = useState<JobRole | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [step, setStep] = useState<"upload" | "analyzing" | "ready">("upload");
+  const [step, setStep] = useState<"upload" | "analyzing" | "ready" | "error">("upload");
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [analysisResult, setAnalysisResult] = useState<{
     score: number;
     feedback: string;
   } | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -115,7 +116,19 @@ const Interview = () => {
         }
       });
 
-      if (analysisError) throw analysisError;
+      if (analysisError) {
+        // Analysis failed but allow continuing
+        setAnalysisError(analysisError.message);
+        setStep("error");
+        
+        // Update session without scores
+        await supabase
+          .from("interview_sessions")
+          .update({ status: "resume_uploaded" })
+          .eq("id", session.id);
+        
+        return;
+      }
 
       // Update session with analysis results
       const { error: updateError } = await supabase
@@ -138,12 +151,12 @@ const Interview = () => {
       });
     } catch (error: any) {
       console.error("Error analyzing resume:", error);
+      setAnalysisError(error.message);
+      setStep("error");
       toast({
         title: "Error",
-        description: error.message,
-        variant: "destructive",
+        description: "Analysis failed, but you can still continue to the interview",
       });
-      setStep("upload");
     }
   };
 
@@ -239,14 +252,41 @@ const Interview = () => {
                   </p>
                 )}
               </div>
-              <Button
-                onClick={analyzeResume}
-                disabled={!resumeFile}
-                className="w-full bg-gradient-primary hover:opacity-90"
-              >
-                Analyze Resume
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
+              <div className="space-y-2">
+                <Button
+                  onClick={analyzeResume}
+                  disabled={!resumeFile}
+                  className="w-full bg-gradient-primary hover:opacity-90"
+                >
+                  Analyze Resume
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+                <Button
+                  onClick={async () => {
+                    const { data: { user } } = await supabase.auth.getUser();
+                    if (!user) return;
+                    
+                    const { data: session } = await supabase
+                      .from("interview_sessions")
+                      .insert({
+                        user_id: user.id,
+                        job_role_id: jobRoleId,
+                        status: "pending",
+                      })
+                      .select()
+                      .single();
+                    
+                    if (session) {
+                      setSessionId(session.id);
+                      navigate(`/voice-interview/${session.id}`);
+                    }
+                  }}
+                  variant="outline"
+                  className="w-full"
+                >
+                  Skip Analysis
+                </Button>
+              </div>
             </CardContent>
           </Card>
         )}
@@ -269,6 +309,40 @@ const Interview = () => {
               </p>
             </CardContent>
           </Card>
+        )}
+
+        {step === "error" && (
+          <div className="space-y-6">
+            <Card className="border-destructive">
+              <CardHeader>
+                <CardTitle>Analysis Unsuccessful</CardTitle>
+                <CardDescription>
+                  We couldn't analyze your resume, but you can still continue with the interview
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/20">
+                  <p className="text-sm text-muted-foreground">{analysisError}</p>
+                </div>
+                <div className="flex gap-3">
+                  <Button
+                    onClick={() => setStep("upload")}
+                    variant="outline"
+                    className="flex-1"
+                  >
+                    Try Again
+                  </Button>
+                  <Button
+                    onClick={startVoiceInterview}
+                    className="flex-1 bg-gradient-primary hover:opacity-90"
+                  >
+                    Continue to Interview
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         )}
 
         {step === "ready" && analysisResult && (
