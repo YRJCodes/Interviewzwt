@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Upload, FileText, ArrowRight, CheckCircle2 } from "lucide-react";
+import { extractTextFromPDF } from "@/utils/pdfExtractor";
 
 interface JobRole {
   title: string;
@@ -104,8 +105,13 @@ const Interview = () => {
 
       if (uploadError) throw uploadError;
 
-      // Read file content
-      const fileText = await resumeFile.text();
+      // Extract text from PDF
+      let fileText = '';
+      if (resumeFile.type === 'application/pdf') {
+        fileText = await extractTextFromPDF(resumeFile);
+      } else {
+        fileText = await resumeFile.text();
+      }
 
       // Analyze resume using Groq AI
       const { data: analysisData, error: analysisError } = await supabase.functions.invoke('analyze-resume', {
