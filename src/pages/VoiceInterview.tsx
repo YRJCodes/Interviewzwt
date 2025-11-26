@@ -19,10 +19,39 @@ const VoiceInterview = () => {
   const { toast } = useToast();
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const speechSynthesisRef = useRef<SpeechSynthesisUtterance | null>(null);
+
+  const speakText = (text: string) => {
+    // Cancel any ongoing speech
+    window.speechSynthesis.cancel();
+    
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+    utterance.volume = 1.0;
+    
+    utterance.onend = () => {
+      setIsAISpeaking(false);
+    };
+    
+    utterance.onerror = (event) => {
+      console.error('Speech synthesis error:', event);
+      setIsAISpeaking(false);
+    };
+    
+    speechSynthesisRef.current = utterance;
+    setIsAISpeaking(true);
+    window.speechSynthesis.speak(utterance);
+  };
 
   useEffect(() => {
     checkAuth();
     loadJobDescription();
+    
+    // Cleanup speech synthesis on unmount
+    return () => {
+      window.speechSynthesis.cancel();
+    };
   }, []);
 
   const checkAuth = async () => {
@@ -70,7 +99,7 @@ const VoiceInterview = () => {
       if (error) throw error;
 
       setMessages([{ role: 'assistant', content: data.message }]);
-      setIsAISpeaking(false);
+      speakText(data.message);
     } catch (error: any) {
       console.error('Error starting interview:', error);
       toast({
@@ -166,7 +195,7 @@ const VoiceInterview = () => {
       if (responseError) throw responseError;
 
       setMessages(prev => [...prev, { role: 'assistant', content: responseData.message }]);
-      setIsAISpeaking(false);
+      speakText(responseData.message);
 
     } catch (error: any) {
       console.error('Error processing answer:', error);
@@ -182,6 +211,10 @@ const VoiceInterview = () => {
   };
 
   const endInterview = async () => {
+    // Stop any ongoing speech
+    window.speechSynthesis.cancel();
+    setIsAISpeaking(false);
+    
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
