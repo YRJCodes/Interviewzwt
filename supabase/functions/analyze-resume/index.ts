@@ -21,25 +21,19 @@ serve(async (req) => {
 
     console.log('Analyzing resume for job:', jobTitle);
 
-    const prompt = `You are an expert resume analyzer. Analyze the following resume against the job description and provide:
-1. A match score (0-100)
-2. Detailed feedback on strengths
-3. Areas for improvement
-4. Specific suggestions
+    // Truncate inputs to prevent token limit issues
+    const maxResumeLength = 3000;
+    const maxJobDescLength = 1000;
+    const truncatedResume = resumeText.slice(0, maxResumeLength);
+    const truncatedJobDesc = jobDescription.slice(0, maxJobDescLength);
 
-Job Title: ${jobTitle}
+    const prompt = `Analyze this resume for the ${jobTitle} position.
 
-Job Description:
-${jobDescription}
+Job Description: ${truncatedJobDesc}
 
-Resume:
-${resumeText}
+Resume: ${truncatedResume}
 
-Provide your response in JSON format with the following structure:
-{
-  "score": <number 0-100>,
-  "feedback": "<detailed feedback string with strengths, weaknesses, and suggestions>"
-}`;
+Provide JSON with: {"score": 0-100, "feedback": "brief analysis with key strengths and improvements"}`;
 
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
@@ -54,6 +48,7 @@ Provide your response in JSON format with the following structure:
           { role: 'user', content: prompt }
         ],
         temperature: 0.7,
+        max_tokens: 1000,
         response_format: { type: "json_object" }
       }),
     });
